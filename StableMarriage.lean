@@ -1,7 +1,12 @@
+
 import StableMarriage.Basic
-import MathLib
+import Mathlib
 
 variable {M W : Type}
+
+-- ============================================================
+-- PART 1: BASIC DEFINITIONS
+-- ============================================================
 
 -- man's pref between two women
 def MenPref (M W : Type) := M → W → W → Prop
@@ -31,7 +36,10 @@ def Stable
     (μ : Matching M W) : Prop :=
   ¬ ∃ m w, BlockingPair mp wp μ m w
 
--- defining valid preferences
+
+-- ============================================================
+-- PART 2: DEFINING VALID PREFERENCES
+-- ============================================================
 
 -- man cannot prefer a woman over herself
 def MenIrreflexive (mp : MenPref M W) : Prop :=
@@ -73,7 +81,10 @@ def WomenComplete (wp : WomenPref M W) : Prop :=
     m₁ ≠ m₂ →
     wp w m₁ m₂ ∨ wp w m₂ m₁
 
--- properties
+
+-- ============================================================
+-- PART 3: PROPERTIES OF VALID PREFERENCES
+-- ============================================================
 
 -- thm 1: a person cannot form a blocking pair with their current partner
 theorem current_partner_not_blocking_man
@@ -193,3 +204,227 @@ theorem women_unique_preference
     · exact h21
     -- asymmetry shows that the opposite preference cannot hold
     · exact women_asymmetric wp hirr htrans w m₂ m₁ h21
+
+
+-- ============================================================
+-- PART 4: GALE-SHAPLEY DATA STRUCTURES
+-- ============================================================
+
+-- partial matching keeps track of who's dating whom
+-- while the algorithm runs (some people won't have partners yet)
+def PartialMatching (M W : Type) :=
+  W → Option M
+-- some m — the woman is currently matched with man m
+-- none — the woman doesn't have a partner yet
+
+-- ProposalHistory: keeps track of which women
+-- each man has already proposed to
+def ProposalHistory (M W : Type) :=
+  M → List W
+
+
+-- ============================================================
+-- PART 5: GALE-SHAPLEY HELPER FUNCTIONS
+-- ============================================================
+
+-- bestWoman: uses menPref to find man's favorite
+-- woman from list
+def bestWoman
+    (mp : MenPref M W)
+    (m : M)
+    [DecidableRel (mp m)] :
+    List W → Option W
+  | [] => none
+  -- if list empty then there is no woman to choose
+  | w :: ws =>
+      -- recursively find the best woman in the remaining list
+      match bestWoman mp m ws with
+      -- if no woman remains, w is the best choice
+      | none => some w
+      -- if the remaining list has a best woman w₂,
+      -- compare w with w₂
+      | some w₂ =>
+          if mp m w w₂ then some w
+          else some w₂
+
+-- remainingWomen: remove women who already received a proposal
+-- so no one is proposed to twice
+
+def remainingWomen [BEq W] :
+    List W → List W → List W
+    -- if there are no women left, return an empty list
+  | [], _ => []
+  -- take the first woman w and the remaining women ws
+  -- proposed is the list of women already proposed to
+  | w :: ws, proposed =>
+      -- check whether w is in the proposed list
+      if proposed.contains w then
+        -- if w already received a proposal, skip her
+        remainingWomen ws proposed
+      else
+        -- otherwise, keep w and check the rest of the list
+        w :: remainingWomen ws proposed
+
+-- nextProposal: finds next woman a man should propose to,
+-- skipping anyone who already rejected him
+def nextProposal
+    [BEq W]
+    (mp : MenPref M W)
+    (m : M)
+    [DecidableRel (mp m)]
+    (women : List W)
+    (proposed : List W) : Option W :=
+  -- first remove women who already received a proposal
+  -- then find the man's favorite among the remaining women
+  bestWoman mp m (remainingWomen women proposed)
+
+-- acceptProposal: determine whether a woman accepts a proposal
+-- uses our existing WomenPref to compare men
+
+def acceptProposal
+    (wp : WomenPref M W)
+    (w : W)
+    [DecidableRel (wp w)]
+    (current : Option M)
+    (newMan : M) : Option M :=
+  -- check whether the woman already has a partner
+  match current with
+  -- if she is unmatched, she accepts the new man
+  | none => some newMan
+  -- if she is already matched with oldMan,
+  -- compare her current partner with the new man
+  | some oldMan =>
+      -- if she prefers newMan over oldMan,
+      -- she leaves oldMan and accepts newMan
+      if wp w newMan oldMan then
+        some newMan
+      -- otherwise, she rejects newMan
+      -- and keeps her current partner
+      else
+        some oldMan
+
+-- updateMatching: updates the temporary matching
+-- after a woman receives a proposal
+def updateMatching
+    [BEq W]
+    (wp : WomenPref M W)
+    [∀ w, DecidableRel (wp w)]
+    (μ : PartialMatching M W)
+    (w : W)
+    (m : M) : PartialMatching M W :=
+  -- return a new matching function
+  fun w₂ =>
+    -- check if w₂ is the woman receiving the proposal
+    if w₂ == w then
+      -- use acceptProposal to determine her new partner
+      acceptProposal wp w (μ w) m
+    else
+      -- all other women keep their current partners
+      μ w₂
+
+-- find whether a man is currently matched
+-- check if any woman has this man as her partner
+def isMatched [BEq M]
+    (μ : PartialMatching M W)
+    (m : M) : List W → Bool
+  | [] => false
+    -- if no women left, then the man is not matched
+  | w :: ws =>
+  -- if women left
+      -- if the women is macthed w the man return true
+      if μ w == some m then true
+      -- else check remaining women
+      else isMatched μ m ws
+
+-- find the first unmatched man
+-- also finds men who became unmatched after being replaced
+def findUnmatched [BEq M]
+    (μ : PartialMatching M W)
+    (women : List W) : List M → Option M
+    -- if no men left to check, no unmatched man in list
+  | [] => none
+  | m :: ms =>
+  -- check if m matched to any woman
+  -- if m alresady macthed, skip him
+      if isMatched μ m women then
+        findUnmatched μ women ms
+      else
+      -- else return him
+        some m
+
+-- addProposal: records a new proposal in a man's history
+def addProposal [BEq M]
+    (history : ProposalHistory M W)
+    (m : M)
+    (w : W) : ProposalHistory M W :=
+  -- create an updated proposal history
+  fun m₂ =>
+    -- check if m₂ is the man who just proposed
+    if m₂ == m then
+      -- add woman w to his list of previous proposals
+      w :: history m
+    else
+      -- all other men keep their previous proposal histories
+      history m₂
+
+
+-- ============================================================
+-- PART 6: MAIN GALE-SHAPLEY ALGORITHM
+-- ============================================================
+
+-- initially, every woman is unmatched
+def emptyMatching : PartialMatching M W :=
+  fun _ => none
+
+-- initially, no man has made any proposals
+def emptyHistory : ProposalHistory M W :=
+  fun _ => []
+
+-- start Gale-Shapley
+-- at most n² proposals for n men and n women
+def galeShapley
+    [BEq M] [BEq W]
+    (mp : MenPref M W)
+    (wp : WomenPref M W)
+    [∀ m, DecidableRel (mp m)]
+    [∀ w, DecidableRel (wp w)]
+    (men : List M)
+    (women : List W) :
+    Nat → PartialMatching M W →
+    ProposalHistory M W → PartialMatching M W
+  -- base case: no steps remain
+  | 0, μ, _ => μ
+  -- recursive case: we have at least one step remaining
+  | fuel + 1, μ, history =>
+      -- find the first unmatched man
+      match findUnmatched μ women men with
+      -- if all men are matched, return the matching
+      | none => μ
+      | some m =>
+          -- find his favorite woman he hasn't proposed to
+          match nextProposal mp m women (history m) with
+          -- if he has no women left to propose to,
+          -- return the current matching
+          | none => μ
+          | some w =>
+              -- record that m proposed to w
+              let newHistory := addProposal history m w
+              -- update the matching based on the woman's preference
+              let newMatching := updateMatching wp μ w m
+              -- repeat with the updated matching and history
+              galeShapley mp wp men women
+                fuel newMatching newHistory
+
+-- runGaleShapley: starts the algorithm
+-- each man can propose to each woman at most once
+def runGaleShapley
+    [BEq M] [BEq W]
+    (mp : MenPref M W)
+    (wp : WomenPref M W)
+    [∀ m, DecidableRel (mp m)]
+    [∀ w, DecidableRel (wp w)]
+    (men : List M)
+    (women : List W) : PartialMatching M W :=
+  -- start with everyone unmatched and no proposals
+    galeShapley mp wp men women
+    (men.length * women.length) emptyMatching emptyHistory
