@@ -209,10 +209,8 @@ def galeShapley
           | some w =>
               -- record the proposal
               let newHistory := addProposal history m w
-
               -- woman decides whether to accept the proposal
               let newMatching := updateMatching wp μ w m
-
               -- continue with updated matching and history
               galeShapley mp wp fuel newMatching newHistory
 
@@ -223,21 +221,3 @@ def runGaleShapley
     (wp : Fin n → List (Fin n)) :
     PartialMatching n × ProposalHistory n :=
   galeShapley mp wp (n * n) emptyMatching emptyHistory
-
--- ============================================================
--- PART 6: FINAL CORRECTNESS GOAL
--- ============================================================
-
--- our goal is to prove that Gale-Shapley always produces
--- a complete and stable matching, assuming valid rankings
---
--- to do this, we need to prove:
--- 1. no man is matched to more than one woman
--- 2. women only trade up to more preferred men
--- 3. men propose in preference order
--- 4. every man and woman is eventually matched
--- 5. no blocking pair exists in the final matching
---
--- the algorithm returns a PartialMatching n, so we must
--- first prove that it represents a bijection
--- then prove the resulting matching is Stable
