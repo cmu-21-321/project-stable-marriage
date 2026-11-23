@@ -2,6 +2,11 @@
 
 A template for Lean 4 projects that depend on [Mathlib](https://github.com/leanprover-community/mathlib4).
 
+**Description**
+# Stable Matching in Lean
+
+This project implements the Gale–Shapley algorithm in Lean. The main theorem states that for two equally sized finite groups with complete, strict preference rankings, the algorithm returns a complete one-to-one matching with no blocking pair. A blocking pair consists of two participants who each prefer the other to their assigned partner. 
+
 ## Prerequisites
 
 Install Lean via [elan](https://github.com/leanprover/elan) (see the
